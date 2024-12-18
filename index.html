@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyPrint | Quantum Gateway</title>
+    <style>
+        :root {
+            --primary-color: #00ffff;
+            --secondary-color: #ff00ff;
+            --background-dark: #0a0a1a;
+            --text-color: #00ffff;
+            --accent-color: #ff00ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: var(--background-dark);
+            color: var(--text-color);
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .quantum-container {
+            width: 100%;
+            max-width: 500px;
+            background: rgba(0,255,255,0.1);
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 
+                0 0 10px rgba(0,255,255,0.4), 
+                0 0 20px rgba(255,0,255,0.4);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .print-type-selector {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+
+        .print-type-radio {
+            display: none;
+        }
+
+        .print-type-label {
+            cursor: pointer;
+            padding: 10px 20px;
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+        }
+
+        .print-type-radio:checked + .print-type-label {
+            background-color: var(--primary-color);
+            color: var(--background-dark);
+        }
+
+        #text, #image {
+            width: 100%;
+            background-color: rgba(0,255,255,0.1);
+            border: 2px solid var(--primary-color);
+            color: var(--text-color);
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            margin-top: 10px;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+        }
+
+        .print-button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--primary-color);
+            color: var(--background-dark);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 10px;
+            color: var(--primary-color);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="quantum-container">
+        <h1>PyPrint Quantum Gateway</h1>
+        
+        <div class="print-type-selector">
+            <input type="radio" id="textMode" name="printType" value="text" class="print-type-radio" checked>
+            <label for="textMode" class="print-type-label">Text Mode</label>
+            
+            <input type="radio" id="imageMode" name="printType" value="image" class="print-type-radio">
+            <label for="imageMode" class="print-type-label">Image Mode</label>
+        </div>
+
+        <div id="textSection">
+            <textarea 
+                id="text" 
+                placeholder="Enter text to print..."
+            ></textarea>
+        </div>
+
+        <div id="imageSection" class="hidden">
+            <input 
+                type="file" 
+                id="image" 
+                accept="image/*"
+            >
+            <img 
+                id="imagePreview" 
+                src="" 
+                alt="Image Preview" 
+                style="display: none;"
+            >
+        </div>
+
+        <button class="print-button">Print</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const textRadio = document.getElementById('textMode');
+            const imageRadio = document.getElementById('imageMode');
+            const textSection = document.getElementById('textSection');
+            const imageSection = document.getElementById('imageSection');
+            const textArea = document.getElementById('text');
+            const imageInput = document.getElementById('image');
+            const imagePreview = document.getElementById('imagePreview');
+            const printButton = document.querySelector('.print-button');
+            const statusDiv = document.getElementById('status');
+
+            // Toggle between text and image modes
+            textRadio.addEventListener('change', () => {
+                textSection.classList.remove('hidden');
+                imageSection.classList.add('hidden');
+                imagePreview.style.display = 'none';
+            });
+
+            imageRadio.addEventListener('change', () => {
+                imageSection.classList.remove('hidden');
+                textSection.classList.add('hidden');
+            });
+
+            // Image preview
+            imageInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        imagePreview.src = event.target.result;
+                        imagePreview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // Print button handler
+            printButton.addEventListener('click', async () => {
+                const formData = new FormData();
+                statusDiv.textContent = '';
+
+                if (textRadio.checked) {
+                    const text = textArea.value.trim();
+                    if (!text) {
+                        statusDiv.textContent = 'Please enter text to print';
+                        return;
+                    }
+                    formData.append('text', text);
+                } else {
+                    const imageFile = imageInput.files[0];
+                    if (!imageFile) {
+                        statusDiv.textContent = 'Please select an image to print';
+                        return;
+                    }
+                    formData.append('image', imageFile);
+                }
+
+                try {
+                    const response = await fetch('/print', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        statusDiv.textContent = 'Print job sent successfully!';
+                        // Clear inputs
+                        textArea.value = '';
+                        imageInput.value = '';
+                        imagePreview.style.display = 'none';
+                    } else {
+                        statusDiv.textContent = result.message || 'Print job failed.';
+                    }
+                } catch (error) {
+                    statusDiv.textContent = 'Error sending print job.';
+                    console.error('Error:', error);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
