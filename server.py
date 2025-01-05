@@ -1,83 +1,68 @@
-""" import os
-os.system("ECHO GAY") 
-
-#for text 
-# os.system("python print.py --text '{TEXT BOX CONTENT HERE}' --font 'Arial.ttf' --font-size 24 --align center --strikethrough")
-# for images
-# os.system("python print.py '{image.jpg}' --font 'Arial.ttf' --font-size 24 --align center --strikethrough")
-# """
+from flask import Flask, request, render_template
 import os
-from flask import Flask, request, jsonify, send_from_directory
-from werkzeug.utils import secure_filename
 import subprocess
-from PIL import Image
-import io
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+image_path = ''
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+blocked_ips = ['', ''] 
 
-def compress_image(image_path, max_size=(384, 1000)):
-    """Compress and resize image for thermal printing"""
-    try:
-        with Image.open(image_path) as img:
-            # Convert to RGB if it's not already
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            
-            # Resize image to fit printer width while maintaining aspect ratio
-            img.thumbnail(max_size, Image.LANCZOS)
-            
-            # Convert to black and white
-            img = img.convert('1')
-            
-            # Save compressed image
-            compressed_path = os.path.join(app.config['UPLOAD_FOLDER'], 'compressed_' + os.path.basename(image_path))
-            img.save(compressed_path)
-            return compressed_path
-    except Exception as e:
-        print(f"Image compression error: {e}")
-        return image_path
+@app.before_request
+def block_ip():
+    """Block requests from specified IPs."""
+    client_ip = request.remote_addr
+    if client_ip in blocked_ips:
+        return f"Access denied for IP: {client_ip}, Please appeal in <a href='https://hackclub.slack.com/archives/C08671G51RS'>https://hackclub.slack.com/archives/C08671G51RS</a>", 403
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
-    return send_from_directory('.', 'index.html')
+    return render_template('index.html')
 
-@app.route('/print', methods=['POST'])
-def print_content():
-    try:
-        # Check if text is provided
-        if 'text' in request.form and request.form['text'].strip():
-            text = request.form['text']
-            cmd = f"python print.py --text '{text}' --font 'Arial.ttf' --font-size 30 "
+@app.route('/postbox', methods=['POST'])
+def postbox():
+    textgr = request.form.get('textgr', 'false').lower() == 'true'
+    text = request.form.get('text', '')
+    client_ip = request.remote_addr  
+
+    image = request.files.get('image')
+    global image_path
+    if image:
+        filename = os.path.basename(image.filename)  
+        if not filename:
+            return "Invalid image filename.", 400
+        image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        image.save(image_path)
+        print(f"Image saved at {image_path}")
+
+    if textgr:
+        if not text.strip():
+            return "No text provided.", 400
+        try:
+            
+            print(f"IP: {client_ip}, Text processed: {text}")
+            cmd = f'python3 print.py --text "{text}" --font-size 30 -darker -d "X5h-F1FF"'
             subprocess.run(cmd, shell=True, check=True)
-            return jsonify({"success": True})
-
-        # Check if image is provided
-        if 'image' in request.files:
-            image = request.files['image']
-            if image.filename:
-                # Save original image
-                filename = secure_filename(image.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                image.save(filepath)
-                
-                # Compress image for printing
-                compressed_filepath = compress_image(filepath)
-                
-                cmd = f"python print.py '{compressed_filepath}' --font 'Arial.ttf' --font-size 24 --align center"
-                subprocess.run(cmd, shell=True, check=True)
-                return jsonify({"success": True})
-
-        return jsonify({"success": False, "message": "No content provided"})
-
-    except subprocess.CalledProcessError as e:
-        return jsonify({"success": False, "message": f"Print error: {str(e)}"})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Server error: {str(e)}"})
+            print(f"IP: {client_ip}, Text processed: {text}")
+            return f"Text processed with text: {text}"
+        except subprocess.CalledProcessError as e:
+            print(f"Error during text processing: {e}")
+            return "Error during text processing.", 500
+    else:
+        if not image_path:
+            return "No image provided.", 400
+        try:
+            
+            print(f"IP: {client_ip}, Image path: {image_path}")
+            cmd = ['python3', 'print.py', image_path, '-d', 'X5h-F1FF']
+            subprocess.run(cmd, check=True)
+            print(f"IP: {client_ip}, Image path: {image_path}")
+            return "Image received and processed."
+        except subprocess.CalledProcessError as e:
+            print(f"Error during image processing: {e}")
+            return "Error during image processing.", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=80, debug=True)
